@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{Error, Write};
+use std::time::{SystemTime, UNIX_EPOCH};
 use zstd;
 use zstd::Encoder;
 
@@ -42,6 +43,14 @@ impl<'a> Write for ZstdWritableBuffer<'a> {
     }
 }
 
+pub fn get_current_ts_ns() -> u64 {
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    time
+}
+
 fn main() {
     // ENCODE //
     let level = 0;
@@ -75,6 +84,8 @@ fn main() {
     println!("Compressed result (extended): {:?}", &output_buf[..bytes_written]);
 
     // DECODE //
+
+    let ts_before = get_current_ts_ns();
     let mut reconstructed_buf = [0; 1024*1024].to_vec();
     let reconstructed_buf_writable = reconstructed_buf.as_mut_slice();
 
@@ -83,10 +94,16 @@ fn main() {
         bytes_written: 0,
     };
 
+
     let mut decoder = zstd::stream::Decoder::new(&output_buf[..bytes_written]).unwrap();
     io::copy(&mut decoder, &mut decompress_writer).unwrap();
 
     let bytes_written = decompress_writer.bytes_written;
+
+    let ts_after = get_current_ts_ns();
+    let diff = ts_after - ts_before;
+    println!("diff: {:?} (us)", diff / 1000);
+
     println!("Decompressed length: {:?}", bytes_written);
     println!("Decompressed result: {:?} ...", &reconstructed_buf[..10]);
 
