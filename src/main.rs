@@ -19,6 +19,12 @@ fn compress_manually(level: i32) {
     encoder.finish().unwrap();
 }
 
+fn decompress_manually(level: i32) {
+    let mut decoder = zstd::stream::Decoder::new(io::stdin()).unwrap();
+    io::copy(&mut decoder, &mut io::stdout()).unwrap();
+    decoder.finish();
+}
+
 struct ZstdWritableBuffer<'a> {
     writer: &'a mut [u8],
     bytes_written: usize,
@@ -72,8 +78,16 @@ fn main() {
     let mut reconstructed_buf = [0; 1024*1024].to_vec();
     let reconstructed_buf_writable = reconstructed_buf.as_mut_slice();
 
-    zstd::stream::copy_decode(&output_buf[..bytes_written], reconstructed_buf_writable).unwrap();
+    let mut decompress_writer = ZstdWritableBuffer {
+        writer: reconstructed_buf_writable,
+        bytes_written: 0,
+    };
 
+    let mut decoder = zstd::stream::Decoder::new(&output_buf[..bytes_written]).unwrap();
+    io::copy(&mut decoder, &mut decompress_writer).unwrap();
+
+    let bytes_written = decompress_writer.bytes_written;
+    println!("Decompressed length: {:?}", bytes_written);
     println!("Decompressed result: {:?} ...", &reconstructed_buf[..10]);
-    println!("Decompressed length: {:?}", reconstructed_buf.len());
+
 }
