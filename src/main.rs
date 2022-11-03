@@ -19,6 +19,22 @@ fn compress_manually(level: i32) {
     encoder.finish().unwrap();
 }
 
+struct ZstdWritableBuffer<'a> {
+    writer: &'a mut [u8],
+    bytes_written: usize,
+}
+
+impl<'a> Write for ZstdWritableBuffer<'a> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let bytes_written = self.writer.write(buf).expect("Error writing");
+        self.bytes_written += bytes_written;
+        Ok(bytes_written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
+}
 
 fn main() {
     // ENCODE //
@@ -30,15 +46,21 @@ fn main() {
     println!("Message length: {:?} ...", message.len());
 
     // if vec is initialised at length 0, I get the error: "writer will not accept any more data"
+    // same if non-zero but still not large enough
     let mut output_buf = [0; 1024*1024].to_vec();
     let output_buf_writable = output_buf.as_mut_slice();
 
-    let mut encoder = Encoder::new(output_buf_writable, level).unwrap();
+    let mut writer = ZstdWritableBuffer {
+        writer: output_buf_writable,
+        bytes_written: 0,
+    };
+
+    let mut encoder = Encoder::new(writer, level).unwrap();
     io::copy(&mut message_readable, &mut encoder).unwrap();
 
-    encoder = encoder.finish_and_return_self();
 
-    let bytes_written = encoder.get_bytes_written();
+    writer = encoder.finish().expect("Error finishing");
+    let bytes_written = writer.bytes_written;
     // println!("bytes_read: {:?}", bytes_read);
     println!("bytes_written: {:?}", bytes_written);
 
